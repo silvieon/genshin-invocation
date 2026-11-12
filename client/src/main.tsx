@@ -3,6 +3,9 @@ import "@gi-tcg/web-ui-core/style.css";
 import "@gi-tcg/deck-builder/style.css";
 import "./styles.css";
 import { App } from "./App";
+import { applyEffectsMode } from "./effects";
+
+applyEffectsMode();
 
 render(() => <App />, document.getElementById("app")!);
 

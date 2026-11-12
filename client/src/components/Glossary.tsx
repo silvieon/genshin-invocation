@@ -1,8 +1,9 @@
-import { For, Show, createMemo, createResource, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
+import { fetchValue } from "../async";
 import { loadGlossary } from "../assets";
 
 export function Glossary() {
-  const [data] = createResource(loadGlossary);
+  const data = fetchValue(loadGlossary);
   const [query, setQuery] = createSignal("");
   const q = () => query().trim().toLowerCase();
 
@@ -31,7 +32,7 @@ export function Glossary() {
         value={query()}
         onInput={(e) => setQuery(e.currentTarget.value)}
       />
-      <Show when={!data.error} fallback={<p class="error">The glossary couldn't be loaded.</p>}>
+      <Show when={!data.error()} fallback={<p class="error">The glossary couldn't be loaded.</p>}>
         <Show when={data()} fallback={<p class="muted">Loading…</p>}>
           <For each={rules()}>
             {(set) => (

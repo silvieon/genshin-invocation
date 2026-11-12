@@ -31,6 +31,13 @@ Requires Node 22+.
 
 **Play vs Computer** on the home page runs the whole game in the browser: the same `@gi-tcg/core` engine the server uses, plus a heuristic opponent (`shared/bot.ts`). The server does no work for these games. Each legal action the engine offers carries a preview of its immediate result (damage, defeats, heals), so the bot scores every action from that preview plus a few rules of thumb (save dice for attacks, use bursts, retreat badly hurt characters, sensible rerolls and mulligans). A decision takes well under a millisecond. The game saves to `localStorage` after every action, so closing the tab and coming back resumes it. The engine chunk (~210 KB gzipped) is only downloaded when this mode is opened.
 
+### Display settings (home page)
+
+- **Card art:** high resolution (420×720 card faces, the default) or data saver (80×137 thumbnails). Either way each image downloads once per device.
+- **Board effects:** *Fast* (default) runs the board's animations at about a third of their length (at most 300 ms each). The board waits for its animations before showing the next event, so this speeds up play itself. *Off* makes everything instant. *Full* keeps the original timings. In every mode, the top bar shows the latest game event as text; click it for the full game log.
+
+Pages never blank out while waiting on the network: there is no page-wide loading screen. Data and card art fill in where they belong, and page code is prefetched while the browser is idle.
+
 The board rotates automatically for portrait phones (⟳ button to override). The table also has **Chat** and a searchable **Rules & keywords** glossary.
 
 ## Architecture

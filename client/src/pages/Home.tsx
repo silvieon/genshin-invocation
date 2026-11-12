@@ -1,9 +1,16 @@
-import { For, Show, createResource, createSignal } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
+import { fetchValue } from "../async";
 import { DeckPicker } from "../components/DeckPicker";
 import { createRoom, roomInfo } from "../api";
 import {
   forgetTicket,
   getCpuGame,
+  getImageQuality,
+  setImageQuality,
+  type ImageQuality,
+  getEffects,
+  setEffects,
+  type EffectsMode,
   getLastDeckId,
   getName,
   isCompleteDeck,
@@ -14,6 +21,7 @@ import {
   setName,
 } from "../local";
 import { navigate } from "../App";
+import { resetAssets } from "../assets";
 import type { PublicRoomInfo } from "../../../shared/protocol";
 
 const STATUS_LABEL: Record<PublicRoomInfo["status"], string> = {
@@ -90,6 +98,34 @@ export function Home() {
           </label>
           <h3>Deck</h3>
           <DeckPicker selected={deckId()} onSelect={chooseDeck} />
+          <label class="field inline">
+            <span>Card art</span>
+            <select
+              value={getImageQuality()}
+              onChange={(e) => {
+                setImageQuality(e.currentTarget.value as ImageQuality);
+                resetAssets();
+                location.reload();
+              }}
+            >
+              <option value="high">High resolution (~70 KB/card, cached)</option>
+              <option value="saver">Data saver (thumbnails)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Board effects</span>
+            <select
+              value={getEffects()}
+              onChange={(e) => {
+                setEffects(e.currentTarget.value as EffectsMode);
+                location.reload();
+              }}
+            >
+              <option value="fast">Fast animations (recommended)</option>
+              <option value="off">Off: instant, events as text only</option>
+              <option value="full">Full-length animations</option>
+            </select>
+          </label>
         </section>
 
         <section class="panel">
@@ -125,7 +161,7 @@ export function Home() {
             <ul class="room-list">
               <For each={tickets()}>
                 {(t) => {
-                  const [info] = createResource(() => roomInfo(t.roomId).catch(() => undefined));
+                  const info = fetchValue(() => roomInfo(t.roomId).catch(() => undefined));
                   return (
                     <li>
                       <a href={`#/room/${t.roomId}`} class="room-link">

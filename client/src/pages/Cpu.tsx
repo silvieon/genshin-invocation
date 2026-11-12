@@ -1,8 +1,8 @@
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import { DeckPicker, CharacterIcons } from "../components/DeckPicker";
 import { Table } from "./Room";
-import { connectLocal, newCpuGame } from "../cpu/localGame";
-import { assets } from "../assets";
+import { connectLocal, newCpuGame, unsupportedCards } from "../cpu/localGame";
+import { readyAssets } from "../assets";
 import {
   getCpuGame,
   getLastDeckId,
@@ -55,9 +55,11 @@ function CpuSetup(props: { previous: CpuSave | null; onStart: (s: CpuSave) => vo
       if (o.kind === "deck") botDeck = listDecks().find((d) => d.id === o.id)?.deck;
       else {
         const { generateRandomDeck } = await import("@gi-tcg/deck-builder");
-        botDeck = await generateRandomDeck(assets());
+        botDeck = await generateRandomDeck(await readyAssets());
       }
       if (!isCompleteDeck(botDeck)) throw new Error("The opponent's deck isn't complete.");
+      const bad = [...unsupportedCards(deck!), ...unsupportedCards(botDeck!)];
+      if (bad.length) throw new Error(`These cards aren't playable in this version yet: ${bad.join(", ")}. Pick another deck.`);
       const s = newCpuGame({ name: name(), deck: deck!, botDeck: botDeck!, botName: "Computer" });
       saveCpuGame(s);
       props.onStart(s);

@@ -88,11 +88,11 @@ export function DeckEditor(props: { deckId: string | null }) {
         <div class="toast">{message()}</div>
       </Show>
       <div class="builder-host">
-        <Show when={!engineVersion.loading} fallback={<p class="muted center">Loading card pool…</p>}>
+        <Show when={engineVersion()} fallback={<p class="muted center">Loading card pool…</p>}>
           <DeckBuilder
             class="builder"
             assetsManager={assets()}
-            version={engineVersion()}
+            version={engineVersion()!}
             locale="en"
             deck={deck()}
             onChangeDeck={setDeck}

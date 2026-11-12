@@ -3,6 +3,7 @@ import { createClient, type Client } from "@gi-tcg/web-ui-core";
 import { Notification, RpcRequest, RpcResponse, base64Decode, base64Encode } from "@gi-tcg/typings";
 import { CloseCode, type ClientMessage, type RoomView, type Seat, type ServerMessage } from "../../shared/protocol";
 import { assets } from "./assets";
+import { createEventFeed } from "./eventFeed";
 import type { SeatTicket } from "./local";
 
 export type LinkState = "connecting" | "online" | "reconnecting" | "closed";
@@ -32,6 +33,8 @@ export interface Connection {
   game: Accessor<ActiveGame | null>;
   chat: Accessor<ChatLine[]>;
   notice: Accessor<{ text: string; at: number } | null>;
+  /** Plain-text log of game events. */
+  log: Accessor<string[]>;
   send(msg: ClientMessage): void;
   dispose(): void;
 }
@@ -48,6 +51,14 @@ export function connect(ticket: SeatTicket): Connection {
   const [game, setGame] = createSignal<ActiveGame | null>(null);
   const [chat, setChat] = createSignal<ChatLine[]>([]);
   const [notice, setNotice] = createSignal<{ text: string; at: number } | null>(null);
+
+  const feed = createEventFeed(
+    () => game()?.who ?? 0,
+    () => {
+      const r = room();
+      return r?.players[1 - r.you]?.name ?? "Opponent";
+    },
+  );
 
   let ws: WebSocket | null = null;
   let disposed = false;
@@ -72,6 +83,7 @@ export function connect(ticket: SeatTicket): Connection {
   const startBoard = (who: 0 | 1, gameNumber: number, resumed: boolean) => {
     cancelRpc();
     disposeBoard?.();
+    if (!resumed) feed.clear();
     createRoot((dispose) => {
       disposeBoard = dispose;
       const [clientIo, Chessboard] = createClient(who, {
@@ -92,9 +104,12 @@ export function connect(ticket: SeatTicket): Connection {
       case "gameStart":
         startBoard(msg.who, msg.gameNumber, msg.resumed);
         return;
-      case "notify":
-        io?.notify(Notification.decode(base64Decode(msg.data)));
+      case "notify": {
+        const n = Notification.decode(base64Decode(msg.data));
+        io?.notify(n);
+        feed.push(n);
         return;
+      }
       case "rpc": {
         const target = io;
         if (!target) return;
@@ -182,6 +197,7 @@ export function connect(ticket: SeatTicket): Connection {
     game,
     chat,
     notice,
+    log: feed.lines,
     send,
     dispose() {
       disposed = true;

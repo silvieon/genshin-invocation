@@ -32,7 +32,7 @@ body,
   height: 100%;
 }
 body {
-  background: radial-gradient(1200px 600px at 50% -10%, #2b3358 0%, var(--bg) 60%) fixed;
+  background: var(--bg);
 }
 a {
   color: var(--gold-2);
@@ -60,7 +60,8 @@ h3 {
   letter-spacing: 0.08em;
   font-weight: 600;
 }
-input {
+input,
+select {
   font: inherit;
   color: var(--text);
   background: var(--bg-2);
@@ -70,6 +71,7 @@ input {
   min-width: 0;
 }
 input:focus-visible,
+select:focus-visible,
 button:focus-visible,
 [role="button"]:focus-visible {
   outline: 2px solid var(--gold);
@@ -116,9 +118,6 @@ button:focus-visible,
   cursor: pointer;
   white-space: nowrap;
   position: relative;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
 }
 .btn:hover:not(:disabled) {
   border-color: var(--gold);
@@ -128,7 +127,7 @@ button:focus-visible,
   cursor: default;
 }
 .btn.primary {
-  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+  background: var(--gold);
   border-color: var(--gold);
   color: #2a2110;
   font-weight: 600;
@@ -205,7 +204,6 @@ button:focus-visible,
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 1.1rem 1.2rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 .field {
   display: grid;
@@ -325,9 +323,8 @@ button:focus-visible,
   align-items: center;
   gap: 0.4rem;
   padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-  background: rgba(15, 18, 28, 0.85);
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(6px);
   position: relative;
   z-index: 20;
   overflow-x: auto;
@@ -372,7 +369,6 @@ button:focus-visible,
 }
 .player.online .dot {
   background: var(--ok);
-  box-shadow: 0 0 6px var(--ok);
 }
 @media (max-width: 640px) {
   .hide-sm,
@@ -407,7 +403,6 @@ button:focus-visible,
   border: 1px solid var(--gold);
   border-radius: 10px;
   padding: 0.6rem 1rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   max-width: calc(100vw - 32px);
 }
 
@@ -447,8 +442,7 @@ button:focus-visible,
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(8, 10, 16, 0.72);
-  backdrop-filter: blur(2px);
+  background: rgba(8, 10, 16, 0.8);
 }
 .overlay-card {
   width: min(520px, 100%);
@@ -490,9 +484,7 @@ button:focus-visible,
   flex-direction: column;
   background: var(--panel);
   border-left: 1px solid var(--line);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
   transform: translateX(105%);
-  transition: transform 0.2s ease;
   visibility: hidden;
 }
 .drawer.open {
@@ -595,4 +587,74 @@ button:focus-visible,
 
 .loading-page {
   padding-top: 30vh;
+}
+.field.inline {
+  margin-top: 1rem;
+}
+
+/* ------------------------------------------------------------ effect modes */
+
+.fx-fast *,
+.fx-fast *::before,
+.fx-fast *::after {
+  backdrop-filter: none !important;
+}
+/* Off: everything snaps to its end state: no transitions, no loops, no blur. */
+.fx-off *,
+.fx-off *::before,
+.fx-off *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  backdrop-filter: none !important;
+  scroll-behavior: auto !important;
+}
+/* Decorative 2160px board texture: a flat colour carries the same information. */
+.fx-off .board img[src*="ChessboardBackground"] {
+  visibility: hidden;
+}
+.fx-off .board {
+  background: #3b4a48;
+}
+
+/* -------------------------------------------------------------- event feed */
+
+.feed-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  padding: 0 0.4rem;
+  font-family: inherit;
+}
+.log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+.log li.round {
+  color: var(--gold-2);
+  margin-top: 0.5rem;
+}
+
+/* Thin bar shown while the next page loads (the current page stays visible). */
+.route-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gold);
+  z-index: 1000;
 }

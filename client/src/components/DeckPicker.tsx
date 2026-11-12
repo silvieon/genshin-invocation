@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
-import { assets } from "../assets";
+import { assets, readyAssets } from "../assets";
 import { isCompleteDeck, listDecks, saveDeck, type SavedDeck } from "../local";
 import { navigate } from "../App";
 
@@ -32,7 +32,7 @@ export function DeckPicker(props: { selected: string | null; onSelect: (id: stri
     setError(null);
     try {
       const { generateRandomDeck } = await import("@gi-tcg/deck-builder");
-      const deck = await generateRandomDeck(assets());
+      const deck = await generateRandomDeck(await readyAssets());
       const names = deck.characters.map((c) => assets().getNameSync(c) ?? "?");
       const d: SavedDeck = { id: newId(), name: `Random: ${names.join(" / ")}`, deck, updatedAt: Date.now() };
       saveDeck(d);

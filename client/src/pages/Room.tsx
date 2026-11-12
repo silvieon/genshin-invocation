@@ -1,4 +1,5 @@
-import { Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, onCleanup } from "solid-js";
+import { fetchValue } from "../async";
 import { Dynamic } from "solid-js/web";
 import { joinRoom, roomInfo } from "../api";
 import { connect, type Connection } from "../connection";
@@ -34,7 +35,7 @@ export function RoomPage(props: { roomId: string }) {
 // ------------------------------------------------------------------- join
 
 function JoinRoom(props: { roomId: string; onJoined: (t: SeatTicket) => void }) {
-  const [info] = createResource(() => props.roomId, roomInfo);
+  const info = fetchValue(() => roomInfo(props.roomId));
   const [name, setNameSig] = createSignal(getName());
   const [deckId, setDeckId] = createSignal<string | null>(getLastDeckId());
   const [busy, setBusy] = createSignal(false);
@@ -69,11 +70,11 @@ function JoinRoom(props: { roomId: string; onJoined: (t: SeatTicket) => void }) 
       <main class="home-grid single">
         <section class="panel">
           <Switch>
-            <Match when={info.loading}>
+            <Match when={info.loading()}>
               <p class="muted">Looking up the room…</p>
             </Match>
-            <Match when={info.error}>
-              <p class="error">{(info.error as Error).message}</p>
+            <Match when={info.error()}>
+              <p class="error">{info.error()!.message}</p>
             </Match>
             <Match when={info() === null}>
               <p>This room doesn't exist or has expired.</p>
@@ -117,7 +118,7 @@ function JoinRoom(props: { roomId: string; onJoined: (t: SeatTicket) => void }) 
 
 // ------------------------------------------------------------------ table
 
-type Drawer = "chat" | "rules" | null;
+type Drawer = "chat" | "rules" | "log" | null;
 
 function useViewport() {
   const read = () => ({ w: window.innerWidth, h: window.innerHeight });
@@ -248,7 +249,9 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
         <Show when={(room()?.round ?? 0) >= 1 && room()?.status !== "finished"}>
           <span class="muted small hide-sm">Round {room()!.round}</span>
         </Show>
-        <div class="spacer" />
+        <button class="feed-line" onClick={() => toggleDrawer("log")} title="Game log">
+          {conn.log().at(-1)?.trim() ?? ""}
+        </button>
         <button class="btn ghost" onClick={cycleRotation} title="Rotate board">
           ⟳ <span class="small">{rotationSetting() === "auto" ? "auto" : `${rotationSetting()}°`}</span>
         </button>
@@ -365,7 +368,7 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
 
       <aside class="drawer" classList={{ open: !!drawer() }} aria-hidden={!drawer()}>
         <div class="drawer-head">
-          <b>{drawer() === "chat" ? "Chat" : "Rules & keywords"}</b>
+          <b>{drawer() === "chat" ? "Chat" : drawer() === "log" ? "Game log" : "Rules & keywords"}</b>
           <button class="btn ghost" onClick={() => setDrawer(null)} aria-label="Close">
             ✕
           </button>
@@ -381,6 +384,13 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
           </Show>
           <Show when={drawer() === "rules"}>
             <Glossary />
+          </Show>
+          <Show when={drawer() === "log"}>
+            <ul class="log">
+              <For each={conn.log()} fallback={<li class="muted">Nothing yet.</li>}>
+                {(line) => <li classList={{ round: line.startsWith("—") }}>{line}</li>}
+              </For>
+            </ul>
           </Show>
         </div>
       </aside>

@@ -84,6 +84,15 @@ export type RotationSetting = "auto" | 0 | 90 | 270;
 export const getRotation = () => readJson<RotationSetting>("gi.rotation", "auto");
 export const setRotation = (r: RotationSetting) => writeJson("gi.rotation", r);
 
+export type ImageQuality = "high" | "saver";
+/** Defaults to full-resolution art unless the browser asks to save data. */
+export const getImageQuality = () =>
+  readJson<ImageQuality>(
+    "gi.imageQuality",
+    (navigator as { connection?: { saveData?: boolean } }).connection?.saveData ? "saver" : "high",
+  );
+export const setImageQuality = (q: ImageQuality) => writeJson("gi.imageQuality", q);
+
 // ------------------------------------------------------ vs computer (local)
 
 /** A game against the computer, run and saved entirely in this browser. */
@@ -114,3 +123,15 @@ export function clearCpuGame() {
     localStorage.removeItem(CPU_KEY);
   } catch {}
 }
+
+/**
+ * "fast" (default): board animations kept but sped up so they never hold up play.
+ * "off": everything instant, decorative board texture hidden; the event log carries the story.
+ * "full": the board's original timings.
+ */
+export type EffectsMode = "fast" | "off" | "full";
+export const getEffects = (): EffectsMode => {
+  const m = readJson<string>("gi.effects", "fast");
+  return m === "off" || m === "full" ? m : "fast";
+};
+export const setEffects = (m: EffectsMode) => writeJson("gi.effects", m);

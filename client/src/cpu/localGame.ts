@@ -11,10 +11,20 @@ import { createBot, type BotIo } from "../../../shared/bot";
 import type { ClientMessage, DeckInput, RoomView } from "../../../shared/protocol";
 import type { ActiveGame, ChatLine, Connection, LinkState } from "../connection";
 import { assets } from "../assets";
-import { saveCpuGame, type CpuSave } from "../local";
+import { createEventFeed } from "../eventFeed";
+import { getEffects, saveCpuGame, type CpuSave } from "../local";
 
 let data: ReturnType<typeof getData> | null = null;
 const gameData = () => (data ??= getData());
+
+/** Card or character ids in a deck that the bundled engine doesn't implement. */
+export function unsupportedCards(deck: DeckInput): number[] {
+  const d = gameData();
+  return [
+    ...deck.characters.filter((id) => !d.characters.has(id)),
+    ...deck.cards.filter((id) => !d.entities.has(id)),
+  ];
+}
 
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
@@ -41,6 +51,8 @@ export function connectLocal(initial: CpuSave): Connection {
   const [game, setGame] = createSignal<ActiveGame | null>(null);
   const [chat] = createSignal<ChatLine[]>([]);
   const [notice, setNotice] = createSignal<{ text: string; at: number } | null>(null);
+
+  const feed = createEventFeed(() => save.humanWho, () => save.botName);
 
   let engine: Game | null = null;
   let bot: BotIo | null = null;
@@ -109,6 +121,7 @@ export function connectLocal(initial: CpuSave): Connection {
     }
 
     disposeBoard?.();
+    if (!save.checkpoint) feed.clear();
     createRoot((dispose) => {
       disposeBoard = dispose;
       const [clientIo, Chessboard] = createClient(humanWho, {
@@ -123,10 +136,15 @@ export function connectLocal(initial: CpuSave): Connection {
     const g = new Game(state, { errorLevel: "toleratePreview" });
     engine = g;
     surrendered = false;
-    bot = createBot(botWho, { thinkMs: 700, randomness: 0.6 });
+    // A short beat so its moves are readable; shorter still when animations are sped up or off.
+    bot = createBot(botWho, { thinkMs: { off: 250, fast: 400, full: 700 }[getEffects()], randomness: 0.6 });
     const board = io!;
     g.players[humanWho].io = {
-      notify: (n) => gen === generation && board.notify(n),
+      notify: (n) => {
+        if (gen !== generation) return;
+        board.notify(n);
+        feed.push(n);
+      },
       rpc: (req) => Promise.resolve(board.rpc(req)),
     };
     g.players[botWho].io = bot;
@@ -196,6 +214,7 @@ export function connectLocal(initial: CpuSave): Connection {
     game,
     chat,
     notice,
+    log: feed.lines,
     send,
     dispose() {
       disposed = true;
