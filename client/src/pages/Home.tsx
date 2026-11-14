@@ -1,3 +1,7 @@
+// #/ — the landing page: name, deck and display settings; create or join an
+// online room; start or continue a game vs the computer; and the rooms this
+// browser holds seats in, with their live status.
+
 import { For, Show, createSignal } from "solid-js";
 import { fetchValue } from "../async";
 import { DeckPicker } from "../components/DeckPicker";
@@ -65,6 +69,7 @@ export function Home() {
     }
   };
 
+  // Accepts a bare code or a whole pasted invite link.
   const join = (e: Event) => {
     e.preventDefault();
     const id = code()

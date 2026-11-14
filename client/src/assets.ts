@@ -1,3 +1,8 @@
+// Card names, images and deck share-codes. These come from the gi-tcg static
+// data service (static-data.piovium.org) straight to the browser; our server
+// only says which card-pool version to ask for. Also loads the rules glossary
+// built from genshin-db (scripts/build-carddb.mjs).
+
 import { AssetsManager } from "@gi-tcg/assets-manager";
 import { createSignal } from "solid-js";
 import { getImageQuality, readJson, writeJson } from "./local";
@@ -35,6 +40,7 @@ export async function readyAssets(): Promise<AssetsManager> {
 let manager: AssetsManager | null = null;
 let managerVersion: string | null = null;
 
+/** The shared assets manager for the current card-pool version (created on first use). */
 export function assets(): AssetsManager {
   const version = engineVersion() ?? "latest";
   if (!manager || managerVersion !== version) {

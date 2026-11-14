@@ -1,3 +1,9 @@
+/*
+ * All of the app's own styling (the board and deck builder bring their own
+ * stylesheets). Plain CSS with variables, kept deliberately flat: no shadows,
+ * gradients or blur, so the page stays cheap to paint on phones.
+ * The .fx-fast / .fx-off sections at the end implement the board-effects setting.
+ */
 :root {
   --bg: #141824;
   --bg-2: #1b2031;
@@ -636,16 +642,128 @@ button:focus-visible,
   padding: 0 0.4rem;
   font-family: inherit;
 }
-.log {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.85em;
-  line-height: 1.45;
-}
-.log li.round {
+.feed-label {
   color: var(--gold-2);
-  margin-top: 0.5rem;
+  font-weight: 600;
+  margin-right: 0.3rem;
+}
+
+/* ------------------------------------------------------------ battle log */
+.table-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.side-log {
+  width: 300px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+}
+.side-log .battle-log {
+  padding: 0.5rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+}
+.battle-log {
+  height: 100%;
+  overflow-y: auto;
+  font-size: 0.85em;
+  line-height: 1.4;
+  overscroll-behavior: contain;
+}
+.log-line {
+  padding: 0.12rem 0 0.12rem 0.5rem;
+  border-left: 3px solid transparent;
+}
+.log-line.me {
+  border-left-color: #5b9bd5;
+}
+.log-line.opp {
+  border-left-color: #d5735b;
+}
+.log-line.effect {
+  padding-left: 1.25rem;
+  color: var(--muted);
+}
+.log-line.round {
+  margin-top: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--panel);
+  color: var(--gold-2);
+  font-weight: 700;
+  border-radius: 4px;
+}
+.log-line.phase {
+  color: var(--gold-2);
+  font-style: italic;
+}
+.log-line.end {
+  margin-top: 0.4rem;
+  color: var(--gold-2);
+  font-weight: 700;
+}
+.log-line.defeated .log-text {
+  color: #ff8a7a;
+  font-weight: 600;
+}
+/* Damage and aura lines take their element's colour. */
+.log-line[data-element="pyro"] .log-text { color: #ff9c6e; }
+.log-line[data-element="hydro"] .log-text { color: #6cc4ff; }
+.log-line[data-element="electro"] .log-text { color: #c79bff; }
+.log-line[data-element="cryo"] .log-text { color: #a8ecf5; }
+.log-line[data-element="anemo"] .log-text { color: #7fe3c3; }
+.log-line[data-element="geo"] .log-text { color: #f2c75c; }
+.log-line[data-element="dendro"] .log-text { color: #a5d65c; }
+.log-line[data-element="piercing"] .log-text { color: #e0e0e0; }
+.log-line[data-element="heal"] .log-text { color: #8fe08f; }
+.reaction {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #1b1408;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+/* The latest action, floated over the middle of the board. */
+.callouts {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  pointer-events: none;
+  width: max-content;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 0.5rem 0.9rem;
+  background: rgba(10, 12, 20, 0.86);
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  font-size: 0.95em;
+  line-height: 1.4;
+  animation: callout-in 160ms ease-out;
+}
+.callouts .log-line.action,
+.callouts .log-line.round {
+  font-weight: 700;
+  color: var(--text);
+}
+.callouts .log-line.round {
+  background: none;
+  margin: 0;
+  text-align: center;
+}
+.callouts .log-line.effect {
+  padding-left: 1rem;
+}
+@keyframes callout-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -40%);
+  }
 }
 
 /* Thin bar shown while the next page loads (the current page stays visible). */

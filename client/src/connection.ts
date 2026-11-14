@@ -1,11 +1,18 @@
+// A Connection is everything the game table needs, as reactive signals plus
+// send(). Two implementations exist:
+//   - connect() below: an online seat, over a WebSocket to the server.
+//   - connectLocal() in cpu/localGame.ts: a vs-computer game run in this tab.
+// The table (pages/Room.tsx) can't tell them apart.
+
 import { createRoot, createSignal, type Accessor } from "solid-js";
 import { createClient, type Client } from "@gi-tcg/web-ui-core";
 import { Notification, RpcRequest, RpcResponse, base64Decode, base64Encode } from "@gi-tcg/typings";
 import { CloseCode, type ClientMessage, type RoomView, type Seat, type ServerMessage } from "../../shared/protocol";
 import { assets } from "./assets";
-import { createEventFeed } from "./eventFeed";
+import { createEventFeed, type LogEntry } from "./eventFeed";
 import type { SeatTicket } from "./local";
 
+/** Health of the link to the server ("closed" means for good: bad seat, or opened elsewhere). */
 export type LinkState = "connecting" | "online" | "reconnecting" | "closed";
 
 export interface ChatLine {
@@ -15,6 +22,7 @@ export interface ChatLine {
   at: number;
 }
 
+/** The board for the game currently being played. */
 export interface ActiveGame {
   /** Engine player index this browser plays as. */
   who: 0 | 1;
@@ -33,8 +41,8 @@ export interface Connection {
   game: Accessor<ActiveGame | null>;
   chat: Accessor<ChatLine[]>;
   notice: Accessor<{ text: string; at: number } | null>;
-  /** Plain-text log of game events. */
-  log: Accessor<string[]>;
+  /** Battle log: what happened, action by action. */
+  log: Accessor<LogEntry[]>;
   send(msg: ClientMessage): void;
   dispose(): void;
 }
@@ -80,6 +88,8 @@ export function connect(ticket: SeatTicket): Connection {
     }
   };
 
+  // A fresh board per engine start. On a resume the server's first notification
+  // carries the full state, so the new board catches up immediately.
   const startBoard = (who: 0 | 1, gameNumber: number, resumed: boolean) => {
     cancelRpc();
     disposeBoard?.();
@@ -96,6 +106,7 @@ export function connect(ticket: SeatTicket): Connection {
     });
   };
 
+  // Game traffic goes straight to the board (and the text log); the rest updates signals.
   const onMessage = (msg: ServerMessage) => {
     switch (msg.t) {
       case "room":
@@ -140,6 +151,8 @@ export function connect(ticket: SeatTicket): Connection {
     }
   };
 
+  // Open a socket and authenticate. If it drops, retry with jittered backoff
+  // (0.5 s doubling to 10 s) unless the server closed it for good.
   const open = () => {
     if (disposed) return;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";

@@ -1,7 +1,13 @@
+// Persistence for rooms. Everything the server knows about a room, including
+// the engine checkpoint of a game in progress, is one RoomRecord, so saving and
+// loading a game is just writing and reading that record. The server keeps no
+// other state: restart it and every room resumes from disk.
+
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { DeckInput, GameResult, Seat } from "../shared/protocol.ts";
 
+/** A claimed seat. */
 export interface SeatRecord {
   name: string;
   /** sha256 of the seat token; the token itself is only known to the player. */
@@ -9,7 +15,9 @@ export interface SeatRecord {
   deck: DeckInput;
 }
 
+/** The saved form of a room (one JSON file on disk). */
 export interface RoomRecord {
+  /** Format version, so an incompatible future format can be detected. */
   v: 1;
   id: string;
   createdAt: number;
@@ -18,15 +26,21 @@ export interface RoomRecord {
   gameNumber: number;
   /** The seat that plays as engine player 0 (who moves first) in the current game. */
   firstSeat: Seat;
+  /** Random seed of the current game (shuffles and dice derive from it). */
   seed: number;
   /** Last resumable engine checkpoint (output of serializeGameStateLog), or null before the first one. */
   checkpoint: unknown | null;
+  /** Round of that checkpoint (shown in the UI); null when no game is in progress. */
   round: number | null;
+  /** Set once the current game ends. */
   result: GameResult | null;
+  /** Which seats have asked for a rematch since the game ended. */
   rematch: [boolean, boolean];
+  /** Last engine error; the game can be retried from the checkpoint. */
   error: string | null;
 }
 
+/** Where rooms are saved. FileRoomStore in production, MemoryRoomStore in tests. */
 export interface RoomStore {
   get(id: string): Promise<RoomRecord | null>;
   put(record: RoomRecord): Promise<void>;

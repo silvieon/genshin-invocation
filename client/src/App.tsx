@@ -1,7 +1,10 @@
-import { Match, Show, Switch, createSignal, onCleanup } from "solid-js";
-import { Dynamic } from "solid-js/web";
-import { Home } from "./pages/Home";
-
+// Top-level router. Routes live in the URL hash so the server only ever has to
+// serve index.html, and invite links work on any static host:
+//   #/              Home
+//   #/room/ABC123   an online room (join form, or the table if this browser is seated)
+//   #/cpu           play vs computer
+//   #/decks/<id>    deck builder ("new" for a fresh deck)
+//
 // The game board and deck builder are large, so they're split out of the first
 // load, then prefetched while the browser is idle so navigating doesn't wait.
 //
@@ -9,6 +12,11 @@ import { Home } from "./pages/Home";
 // load card art through resources, and under a Suspense boundary every image
 // still downloading would blank the whole screen. Without one, images simply
 // fill in where they belong while the rest of the UI stays put.
+
+import { Match, Show, Switch, createSignal, onCleanup } from "solid-js";
+import { Dynamic } from "solid-js/web";
+import { Home } from "./pages/Home";
+
 type RoomModule = typeof import("./pages/Room");
 type CpuModule = typeof import("./pages/Cpu");
 type DecksModule = typeof import("./pages/DeckEditor");
@@ -18,6 +26,7 @@ const loaders = {
   cpu: () => import("./pages/Cpu"),
   decks: () => import("./pages/DeckEditor"),
 };
+/** Page modules loaded so far; rendering reads this so a page appears the moment its code arrives. */
 const [mods, setMods] = createSignal<{ room?: RoomModule; cpu?: CpuModule; decks?: DecksModule }>({});
 function load<K extends keyof typeof loaders>(key: K) {
   return loaders[key]().then((m) => {
@@ -34,6 +43,7 @@ idle(() => {
 
 export type Route = { page: "home" } | { page: "decks"; deckId: string | null } | { page: "room"; roomId: string } | { page: "cpu" };
 
+/** URL hash → route; anything unrecognized is Home. */
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean);
   if (parts[0] === "room" && parts[1]) return { page: "room", roomId: parts[1].toUpperCase() };

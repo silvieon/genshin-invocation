@@ -1,3 +1,6 @@
+// In-room chat (online rooms only). Messages are relayed by the server and
+// never stored, so they're gone after a reload.
+
 import { For, createEffect, createSignal, on } from "solid-js";
 import type { ChatLine } from "../connection";
 import type { Seat } from "../../../shared/protocol";
@@ -6,6 +9,7 @@ import { MAX_CHAT_LENGTH } from "../../../shared/protocol";
 export function Chat(props: { lines: ChatLine[]; you: Seat; onSend: (text: string) => void; disabled?: boolean }) {
   const [text, setText] = createSignal("");
   let list!: HTMLDivElement;
+  // Keep the newest message in view.
   createEffect(
     on(
       () => props.lines.length,

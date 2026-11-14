@@ -1,8 +1,12 @@
+// The list of saved decks used wherever a deck is chosen (home, join, vs
+// computer), with shortcuts to build, randomize or import one.
+
 import { For, Show, createSignal } from "solid-js";
 import { assets, readyAssets } from "../assets";
 import { isCompleteDeck, listDecks, saveDeck, type SavedDeck } from "../local";
 import { navigate } from "../App";
 
+/** A deck's three character portraits (small thumbnails are fine at this size). */
 export function CharacterIcons(props: { ids: number[]; size?: "sm" | "md" }) {
   return (
     <div class={`char-icons ${props.size ?? "md"}`}>
@@ -27,6 +31,7 @@ export function DeckPicker(props: { selected: string | null; onSelect: (id: stri
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
+  // A random legal deck from the engine's card pool (the generator is loaded only when used).
   const addRandom = async () => {
     setBusy(true);
     setError(null);

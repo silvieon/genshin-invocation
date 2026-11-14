@@ -1,3 +1,10 @@
+// #/room/<code>: an online room. Shows the join form if this browser doesn't
+// hold a seat in the room yet, otherwise the game table.
+//
+// Table is also exported for the vs-computer page: it renders the board plus
+// the top bar, overlays (waiting, paused, error, finished) and side drawers
+// (chat, rules, game log) from any Connection.
+
 import { For, Match, Show, Switch, createEffect, createSignal, onCleanup } from "solid-js";
 import { fetchValue } from "../async";
 import { Dynamic } from "solid-js/web";
@@ -6,10 +13,13 @@ import { connect, type Connection } from "../connection";
 import { DeckPicker } from "../components/DeckPicker";
 import { Glossary } from "../components/Glossary";
 import { Chat } from "../components/Chat";
+import { BattleLog, Callouts } from "../components/BattleLog";
 import {
   getLastDeckId,
   getName,
   getRotation,
+  getSideLog,
+  setSideLog,
   getTicket,
   isCompleteDeck,
   listDecks,
@@ -34,6 +44,7 @@ export function RoomPage(props: { roomId: string }) {
 
 // ------------------------------------------------------------------- join
 
+/** Invite-link landing page: look up the room, pick a name and deck, take the free seat. */
 function JoinRoom(props: { roomId: string; onJoined: (t: SeatTicket) => void }) {
   const info = fetchValue(() => roomInfo(props.roomId));
   const [name, setNameSig] = createSignal(getName());
@@ -120,6 +131,7 @@ function JoinRoom(props: { roomId: string; onJoined: (t: SeatTicket) => void }) 
 
 type Drawer = "chat" | "rules" | "log" | null;
 
+/** Window size as a signal (drives automatic board rotation on portrait phones). */
 function useViewport() {
   const read = () => ({ w: window.innerWidth, h: window.innerHeight });
   const [vp, setVp] = createSignal(read());
@@ -133,6 +145,7 @@ function useViewport() {
   return vp;
 }
 
+/** The table for an online seat: owns the WebSocket connection for as long as the page is open. */
 function OnlineTable(props: { ticket: SeatTicket }) {
   const conn = connect(props.ticket);
   onCleanup(() => conn.dispose());
@@ -158,6 +171,19 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
     if (r !== "auto") return r;
     // Portrait phones: turn the landscape board sideways so it uses the whole screen.
     return vp().h > vp().w * 1.15 && vp().w < 900 ? 90 : 0;
+  };
+  // Wide landscape screens keep the battle log open beside the board (Showdown
+  // style); narrower ones get it in a drawer, plus the on-board callouts.
+  const [sideLogPref, setSideLogPref] = createSignal(getSideLog());
+  const wide = () => vp().w >= 1100 && rotation() === 0;
+  const sideLog = () => wide() && sideLogPref();
+  const toggleLog = () => {
+    if (wide()) {
+      const next = !sideLogPref();
+      setSideLogPref(next);
+      setSideLog(next);
+      if (next && drawer() === "log") setDrawer(null);
+    } else toggleDrawer("log");
   };
 
   createEffect(() => {
@@ -249,8 +275,8 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
         <Show when={(room()?.round ?? 0) >= 1 && room()?.status !== "finished"}>
           <span class="muted small hide-sm">Round {room()!.round}</span>
         </Show>
-        <button class="feed-line" onClick={() => toggleDrawer("log")} title="Game log">
-          {conn.log().at(-1)?.trim() ?? ""}
+        <button class="feed-line" onClick={toggleLog} title={sideLog() ? "Hide the battle log" : "Show the battle log"}>
+          <span class="feed-label">Log</span> {sideLog() ? "" : (conn.log().at(-1)?.text ?? "")}
         </button>
         <button class="btn ghost" onClick={cycleRotation} title="Rotate board">
           ⟳ <span class="small">{rotationSetting() === "auto" ? "auto" : `${rotationSetting()}°`}</span>
@@ -275,6 +301,7 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
         <div class="toast">{toast()}</div>
       </Show>
 
+      <div class="table-body">
       <main class="board-area">
         <Show when={conn.game()} keyed>
           {(g) => (
@@ -292,6 +319,9 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
               }
             />
           )}
+        </Show>
+        <Show when={conn.game()}>
+          <Callouts lines={conn.log()} />
         </Show>
 
         <Show when={overlayFor(conn, room())}>
@@ -365,10 +395,16 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
           )}
         </Show>
       </main>
+      <Show when={sideLog()}>
+        <aside class="side-log" aria-label="Battle log">
+          <BattleLog lines={conn.log()} />
+        </aside>
+      </Show>
+      </div>
 
       <aside class="drawer" classList={{ open: !!drawer() }} aria-hidden={!drawer()}>
         <div class="drawer-head">
-          <b>{drawer() === "chat" ? "Chat" : drawer() === "log" ? "Game log" : "Rules & keywords"}</b>
+          <b>{drawer() === "chat" ? "Chat" : drawer() === "log" ? "Battle log" : "Rules & keywords"}</b>
           <button class="btn ghost" onClick={() => setDrawer(null)} aria-label="Close">
             ✕
           </button>
@@ -386,11 +422,7 @@ export function Table(props: { conn: Connection; roomId: string; seat: Seat; vsC
             <Glossary />
           </Show>
           <Show when={drawer() === "log"}>
-            <ul class="log">
-              <For each={conn.log()} fallback={<li class="muted">Nothing yet.</li>}>
-                {(line) => <li classList={{ round: line.startsWith("—") }}>{line}</li>}
-              </For>
-            </ul>
+            <BattleLog lines={conn.log()} />
           </Show>
         </div>
       </aside>

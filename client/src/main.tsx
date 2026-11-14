@@ -1,3 +1,7 @@
+// Browser entry point (loaded by client/index.html). Pulls in the board and
+// deck-builder stylesheets plus ours, applies the board-effects speed setting
+// before anything animates, mounts the app, and registers the service worker.
+
 import { render } from "solid-js/web";
 import "@gi-tcg/web-ui-core/style.css";
 import "@gi-tcg/deck-builder/style.css";

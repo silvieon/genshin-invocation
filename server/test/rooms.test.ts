@@ -1,3 +1,8 @@
+// End-to-end tests of online rooms against a real server instance on a random
+// port: create/join over HTTP, play over WebSockets with scripted clients,
+// disconnect mid-game (engine must stop, game must be saved), reconnect and
+// resume, restart the server and resume from disk, rematch, and bad input.
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

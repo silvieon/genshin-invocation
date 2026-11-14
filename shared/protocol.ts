@@ -3,12 +3,17 @@
 // Game traffic (notifications, RPC requests/responses) is carried as base64
 // encoded protobuf messages from @gi-tcg/typings, wrapped in a small JSON
 // envelope. Everything else is plain JSON.
+//
+// The vs-computer mode doesn't use the network, but reuses RoomView and
+// ClientMessage so the same table UI drives both modes.
 
+/** A deck as definition ids: 3 characters and 30 action cards. */
 export interface DeckInput {
   characters: number[];
   cards: number[];
 }
 
+/** Position in the room: 0 = whoever created it, 1 = whoever joined. Unlike the engine's player index, it never changes between games. */
 export type Seat = 0 | 1;
 
 export type RoomStatus =
@@ -50,6 +55,7 @@ export interface GameResult {
   at: number;
 }
 
+/** GET /api/rooms/:id — what someone holding an invite link may see. */
 export interface PublicRoomInfo {
   id: string;
   status: RoomStatus;
@@ -57,23 +63,31 @@ export interface PublicRoomInfo {
   guest: string | null;
 }
 
+/** Returned when creating or joining a room. The browser stores it; `token` proves ownership of the seat. */
 export interface JoinResult {
   roomId: string;
   seat: Seat;
   token: string;
 }
 
+/** Browser → server, over the WebSocket. */
 export type ClientMessage =
   /** Must be the first message on a socket. */
   | { t: "auth"; room: string; token: string }
+  /** Answer to an `rpc` (protobuf `RpcResponse`, base64). */
   | { t: "rpcResponse"; id: number; data: string }
+  /** Forfeit the current game. */
   | { t: "giveUp" }
+  /** Ask for another game after one ends; starts once both seats ask. */
   | { t: "rematch" }
+  /** Resume from the last checkpoint after an engine error. */
   | { t: "retry" }
   | { t: "chat"; text: string }
   | { t: "ping" };
 
+/** Server → browser, over the WebSocket. */
 export type ServerMessage =
+  /** The room changed (someone joined, connected, left, a game ended...). */
   | { t: "room"; room: RoomView }
   /** Engine notification (protobuf `Notification`, base64). */
   | { t: "notify"; data: string }
@@ -84,6 +98,7 @@ export type ServerMessage =
   /** A fresh engine instance started (new game or resume from checkpoint). */
   | { t: "gameStart"; who: 0 | 1; resumed: boolean; gameNumber: number }
   | { t: "chat"; seat: Seat; name: string; text: string; at: number }
+  /** Something for the player to read (e.g. an invalid move was re-asked). */
   | { t: "error"; message: string }
   | { t: "pong" };
 

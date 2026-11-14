@@ -5,6 +5,11 @@
 // defeated, healing...), so the bot scores each legal action from that preview
 // plus a few rules of thumb and plays the best one. A decision costs well under
 // a millisecond, so it runs comfortably in the player's own browser.
+//
+// It lives in shared/ because both sides use it: the browser's vs-computer
+// mode (client/src/cpu/localGame.ts) and the server's bot test.
+// It is a PlayerIO like any human seat: the engine notifies it of state and
+// asks it questions via rpc; it never sees the opponent's hidden cards.
 
 import {
   ActionValidity,
@@ -42,6 +47,7 @@ export const elementOf = (characterDefinitionId: number): PbDiceType => {
   return e >= 1 && e <= 7 ? (e as PbDiceType) : PbDiceType.UNSPECIFIED;
 };
 
+/** Number of dice an action costs (energy and the once-per-game "legend" requirement aren't dice). */
 const diceCost = (cost: PbDiceRequirement[]) =>
   cost.reduce(
     (n, c) => (c.type === PbDiceRequirementType.ENERGY || c.type === PbDiceRequirementType.LEGEND ? n : n + c.count),
@@ -49,6 +55,7 @@ const diceCost = (cost: PbDiceRequirement[]) =>
   );
 const needsEnergy = (cost: PbDiceRequirement[]) => cost.some((c) => c.type === PbDiceRequirementType.ENERGY && c.count > 0);
 
+/** A computer player for engine seat `who`. Plug the result in as that player's io. */
 export function createBot(who: 0 | 1, opts: BotOptions = {}): BotIo {
   const random = opts.random ?? Math.random;
   const randomness = opts.randomness ?? 0.6;
@@ -60,6 +67,7 @@ export function createBot(who: 0 | 1, opts: BotOptions = {}): BotIo {
   const theirIds = () => new Set(opp?.character.map((c) => c.id));
   const active = () => me?.character.find((c) => c.id === me?.activeCharacterId);
 
+  /** Value of an action's predicted outcome: damage and defeats dealt are good, taken are bad, healing ourselves is good. */
   function scorePreview(preview: PreviewData[]) {
     const mine = mineIds();
     const theirs = theirIds();
@@ -76,6 +84,7 @@ export function createBot(who: 0 | 1, opts: BotOptions = {}): BotIo {
     return s;
   }
 
+  /** Heuristic score of one legal action; -Infinity for actions never worth taking. 0 is "end the round". */
   function scoreAction(a: Action, all: Action[]): number {
     const act = a.action;
     if (!act || a.validity !== ActionValidity.VALID) return -Infinity;
@@ -117,8 +126,10 @@ export function createBot(who: 0 | 1, opts: BotOptions = {}): BotIo {
         return 0;
     }
   }
+  /** Element of a (possibly missing) character. */
   const from = (c: { definitionId: number } | undefined) => (c ? elementOf(c.definitionId) : PbDiceType.UNSPECIFIED);
 
+  /** Answer one engine question. Every branch returns something the engine accepts. */
   function decide(request: RpcRequest): RpcResponse["response"] {
     const r = request.request!;
     switch (r.$case) {
@@ -168,11 +179,13 @@ export function createBot(who: 0 | 1, opts: BotOptions = {}): BotIo {
   }
 
   return {
+    // Remember the latest state (our dice, hand, characters) for the next decision.
     notify(n) {
       if (!n.state) return;
       me = n.state.player[who];
       opp = n.state.player[1 - who];
     },
+    // Decide at once, then hold the answer for thinkMs so the human can follow along.
     rpc(request) {
       const response = { response: decide(request) };
       const ms = opts.thinkMs ?? 0;

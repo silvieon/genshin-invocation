@@ -1,3 +1,7 @@
+// Checks the computer opponent (shared/bot.ts) is legal and competent: it plays
+// complete games against a naive opponent in-process, never making a move the
+// engine rejects, and wins most of them.
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Game, type PlayerIO } from "@gi-tcg/core";

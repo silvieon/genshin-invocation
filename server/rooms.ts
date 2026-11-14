@@ -1,3 +1,11 @@
+// Rooms: the server's game logic, independent of HTTP and WebSockets.
+//
+// A room has two seats. Each seat is claimed with a name and deck and gets a
+// secret token (stored only as a hash) that the browser keeps and later uses to
+// reconnect to that seat. index.ts translates HTTP requests and socket
+// messages into calls on RoomManager; RoomManager decides when to start, pause,
+// resume or finish the engine (session.ts) and saves through a RoomStore.
+
 import crypto from "node:crypto";
 import {
   MAX_CHAT_LENGTH,
@@ -14,11 +22,13 @@ import { validateDeck } from "./cards.ts";
 import { GameSession, seatOfWho, whoOfSeat } from "./session.ts";
 import type { RoomRecord, RoomStore } from "./storage.ts";
 
+/** One player's live socket, abstracted so rooms don't depend on the ws library (tests can fake it). */
 export interface Connection {
   send(msg: ServerMessage): void;
   close(code: number, reason: string): void;
 }
 
+/** An error meant for the player; index.ts turns it into an HTTP response with this status. */
 export class RoomError extends Error {
   constructor(
     readonly status: number,
@@ -28,6 +38,7 @@ export class RoomError extends Error {
   }
 }
 
+/** A room loaded into memory: its saved record plus whatever is live right now. */
 interface LiveRoom {
   record: RoomRecord;
   conns: [Connection | null, Connection | null];
@@ -35,6 +46,7 @@ interface LiveRoom {
   lastChatAt: [number, number];
 }
 
+/** No 0/O or 1/I, so codes survive being read aloud or retyped. */
 const ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_ID_LENGTH = 6;
 const CHAT_COOLDOWN_MS = 400;
@@ -83,6 +95,7 @@ export class RoomManager {
 
   // ---------------------------------------------------------------- HTTP API
 
+  /** New room with the creator in seat 0. The returned token is the only copy; the server keeps its hash. */
   async create(name: unknown, deck: unknown): Promise<JoinResult> {
     const v = validateDeck(deck);
     if (!v.ok) throw new RoomError(400, v.error);
@@ -112,6 +125,7 @@ export class RoomManager {
     return { roomId: id, seat: 0, token };
   }
 
+  /** Claim seat 1. The game starts later, once both players have a socket open. */
   async join(id: string, name: unknown, deck: unknown): Promise<JoinResult> {
     const v = validateDeck(deck);
     if (!v.ok) throw new RoomError(400, v.error);
@@ -130,6 +144,7 @@ export class RoomManager {
     }
   }
 
+  /** What anyone with the room code may see (no tokens, no decks). */
   async info(id: string): Promise<PublicRoomInfo | null> {
     const room = this.live.get(id);
     const record = room?.record ?? (await this.store.get(id));
@@ -165,6 +180,7 @@ export class RoomManager {
     return seat;
   }
 
+  /** A socket closed. If it was the seat's current one, pause the game (stop the engine) and maybe unload the room. */
   disconnect(id: string, seat: Seat, conn: Connection) {
     const room = this.live.get(id);
     if (!room || room.conns[seat] !== conn) return;
@@ -182,6 +198,7 @@ export class RoomManager {
     this.releaseIfIdle(room);
   }
 
+  /** A message from an authenticated seat. Messages from a socket that has since been replaced are dropped. */
   handleMessage(id: string, seat: Seat, conn: Connection, msg: ClientMessage) {
     const room = this.live.get(id);
     if (!room || room.conns[seat] !== conn) return;
@@ -237,6 +254,7 @@ export class RoomManager {
 
   // -------------------------------------------------------------- internals
 
+  /** Load a room into memory (once, even if several requests ask at the same moment). */
   private async acquire(id: string): Promise<LiveRoom | null> {
     id = String(id).toUpperCase();
     const existing = this.live.get(id);
@@ -257,6 +275,7 @@ export class RoomManager {
     return p;
   }
 
+  /** Drop a room from memory once nobody is connected; it stays on disk. */
   private releaseIfIdle(room: LiveRoom) {
     if (!room.conns[0] && !room.conns[1] && !room.session && this.live.get(room.record.id) === room) {
       this.live.delete(room.record.id);
@@ -279,6 +298,7 @@ export class RoomManager {
     return "paused";
   }
 
+  /** The room as one particular seat sees it (sent as a `room` message on every change). */
   private view(room: LiveRoom, you: Seat): RoomView {
     const { record } = room;
     const player = (s: Seat) =>
@@ -302,6 +322,11 @@ export class RoomManager {
     for (const s of [0, 1] as const) room.conns[s]?.send({ t: "room", room: this.view(room, s) });
   }
 
+  /**
+   * Start (or resume from the checkpoint) the engine if, and only if, both
+   * players are connected and the game isn't over or broken. The hooks keep the
+   * record on disk in step with the engine.
+   */
   private maybeStart(room: LiveRoom) {
     const { record } = room;
     if (room.session || !room.conns[0] || !room.conns[1] || !record.seats[1] || record.result || record.error) return;
@@ -374,6 +399,7 @@ export class RoomManager {
     this.broadcastRoom(room);
   }
 
+  /** Both players asked for a rematch: same decks, new seed, first player re-drawn. */
   private newGame(room: LiveRoom) {
     const { record } = room;
     record.gameNumber++;

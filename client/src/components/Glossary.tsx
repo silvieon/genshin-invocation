@@ -1,3 +1,6 @@
+// The "Rules" drawer at the table: searchable keywords and elemental-reaction
+// rules, from the glossary extracted from genshin-db at build time.
+
 import { For, Show, createMemo, createSignal } from "solid-js";
 import { fetchValue } from "../async";
 import { loadGlossary } from "../assets";

@@ -1,3 +1,7 @@
+// Card data on the server: the engine's card pool (from @gi-tcg/data), the
+// version it corresponds to, and deck validation so a room can never be
+// created with a deck the engine can't run.
+
 import getData from "@gi-tcg/data";
 import { CURRENT_VERSION, type GameData } from "@gi-tcg/core";
 import type { DeckInput } from "../shared/protocol.ts";
@@ -12,6 +16,7 @@ export function gameData(): GameData {
   return (cached ??= getData());
 }
 
+/** Entity types that are action cards (as opposed to statuses, summons, etc. the engine also defines). */
 const PLAYABLE_TYPES = new Set(["eventCard", "equipment", "support"]);
 
 export const DECK_CHARACTERS = 3;

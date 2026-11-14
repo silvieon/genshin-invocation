@@ -1,3 +1,6 @@
+// A tiny non-suspending alternative to Solid's createResource, used for every
+// server lookup so the page never goes blank while waiting.
+
 import { createSignal, type Accessor } from "solid-js";
 
 export interface AsyncValue<T> {

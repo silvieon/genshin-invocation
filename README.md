@@ -34,29 +34,147 @@ Requires Node 22+.
 ### Display settings (home page)
 
 - **Card art:** high resolution (420×720 card faces, the default) or data saver (80×137 thumbnails). Either way each image downloads once per device.
-- **Board effects:** *Fast* (default) runs the board's animations at about a third of their length (at most 300 ms each). The board waits for its animations before showing the next event, so this speeds up play itself. *Off* makes everything instant. *Full* keeps the original timings. In every mode, the top bar shows the latest game event as text; click it for the full game log.
+- **Board effects:** *Fast* (default) runs the board's animations at about a third of their length (at most 300 ms each). The board waits for its animations before showing the next event, so this speeds up play itself. *Off* makes everything instant. *Full* keeps the original timings.
+
+- **Battle log:** like Pokémon Showdown's, every action and what it caused (damage by element, reactions, defeats, heals, summons, statuses, cards played, switches, draws) is written to a scrolling log. On wide screens it sits in a column beside the board, and **Log** in the top bar hides or shows it. On narrow screens **Log** opens it as a drawer. Each action and its effects also pop up briefly in the middle of the board, so you can follow the play without looking away. Against the computer, it pauses about a second before each move so there's time to read what happened.
 
 Pages never blank out while waiting on the network: there is no page-wide loading screen. Data and card art fill in where they belong, and page code is prefetched while the browser is idle.
 
 The board rotates automatically for portrait phones (⟳ button to override). The table also has **Chat** and a searchable **Rules & keywords** glossary.
 
-## Architecture
+## Architecture: client and server
+
+The rules engine (`@gi-tcg/core`) is a plain TypeScript library that runs anywhere JavaScript runs. It talks to each player through a `PlayerIO` with two calls:
+
+- **`notify(notification)`**: "here is what changed", fire and forget. The board animates it.
+- **`rpc(request) → response`**: "your move". Pick an action, choose which dice to reroll, which cards to swap back, which character goes in. The engine waits for the answer.
+
+The whole design comes down to **where the engine runs and what sits on the other end of each `PlayerIO`.**
 
 ```
-browser (SolidJS)                              server (Node, one process)
-┌──────────────────────────┐   WebSocket   ┌───────────────────────────────────────────┐
-│ @gi-tcg/web-ui-core board│◄────────────► │ RoomManager                               │
-│  io.notify / io.rpc      │  JSON + b64   │  ├─ room record on disk (data/rooms/*.json)│
-│ @gi-tcg/deck-builder     │   protobuf    │  └─ GameSession  ◄─ only while BOTH online │
-│ service worker: card art │               │       @gi-tcg/core Game + @gi-tcg/data     │
-└──────────────────────────┘               └───────────────────────────────────────────┘
+ONLINE ROOM: the engine runs on the server; both browsers only render and answer
+┌─ browser A ──────────────┐                 ┌─ server (one Node process) ──────────────┐
+│ Table  (pages/Room.tsx)  │                 │ index.ts    HTTP API · /ws · static files│
+│  └ board (web-ui-core)   │   WebSocket     │ rooms.ts    seats, tokens, start/pause   │
+│      ▲ notify │ rpc      │◄──────────────► │ session.ts  Game ◄─ PlayerIO per seat    │
+│ connection.ts  connect() │ JSON + base64   │ storage.ts  data/rooms/<CODE>.json       │
+└──────────────────────────┘    protobuf     └──────────────────────────────────────────┘
+┌─ browser B ──────────────┐                        ▲
+│ same as A                │◄───────────────────────┘
+└──────────────────────────┘
+
+VS COMPUTER: the engine runs in the browser; the server only served the page
+┌─ browser ───────────────────────────────────────────────────────────┐
+│ Table (pages/Room.tsx)                                              │
+│  └ board (web-ui-core) ◄── PlayerIO ── Game ── PlayerIO ──► bot.ts  │
+│ cpu/localGame.ts  connectLocal()          checkpoint → localStorage │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-- **`server/session.ts`**: one `Game` per room, the single source of truth. Each player's `PlayerIO` forwards engine notifications and RPC requests over the socket. Malformed or illegal answers are asked again instead of forfeiting the game. Every resumable engine pause (`onPause` with `canResume`) is serialized with `serializeGameStateLog`, about 7 KB and under 1 ms.
-- **`server/rooms.ts`**: room lifecycle. A room is held in memory only while someone is connected, and the engine only runs while *both* are. An idle server holds nothing and runs no timers apart from a 6-hourly expiry sweep.
-- **`server/storage.ts`**: one JSON file per room, written atomically (temp file + rename), with saves coalesced per room.
-- **`server/index.ts`**: HTTP API (`POST /api/rooms`, `POST /api/rooms/:id/join`, `GET /api/rooms/:id`, `/api/meta`, `/api/health`), the `/ws` socket (first message authenticates with the seat token), and static file serving. Players are identified by a random seat token kept in their browser's localStorage, and the server stores only its hash.
-- **`client/`**: SolidJS + Vite. The Room and deck-editor pages are lazy-loaded.
+### What the server owns
+
+- **The truth for online games.** Only the server's engine decides what happens. A browser can only answer the questions it's asked; a malformed or illegal answer is asked again (`session.ts`, `checkResponse`) rather than trusted.
+- **Seats.** Creating or joining a room returns a random **seat token**. The browser keeps it in localStorage and the server stores only its hash. The first WebSocket message must present it (`{t:"auth"}`), which is how a returning player gets their seat back from any tab, after any disconnect.
+- **Saving.** After every action the engine pauses at a resumable point, and the server serializes the state (~7 KB) into the room's JSON file. A room file is the whole room: seats, decks, seed, checkpoint and result. Restarting the server loses nothing.
+- **Compute only while it's needed.** A room is in memory only while someone is connected, and its engine runs only while *both* players are. When either leaves, the engine is discarded and the game waits on disk. When both are back, a new engine resumes from the checkpoint and each browser gets a fresh board, which the first notification brings up to date.
+
+### What the client owns
+
+- **All rendering and input.** The board (`@gi-tcg/web-ui-core`) and deck builder (`@gi-tcg/deck-builder`) are gi-tcg's own UI components. Our code wraps them in pages, a top bar, overlays and drawers.
+- **Everything personal.** Decks, display name, settings, seat tokens and the vs-computer save are kept in this browser's localStorage (`local.ts`). The server never sees a deck until it's used to sit down.
+- **Card data and art.** These go directly from the gi-tcg static-data service to the browser and are cached by the service worker. The server only says which card-pool version its engine implements (`/api/meta`), so the client never offers a card the engine can't play.
+- **Games against the computer, entirely.** The same engine package and the bot run in the tab. The server isn't contacted after the page loads.
+
+### How they fit together
+
+**`shared/` is the contract.** `protocol.ts` defines every message in both directions and the `RoomView` that describes a room's state. Game traffic is the engine's own protobuf messages (`@gi-tcg/typings`), base64-encoded inside small JSON envelopes. Both sides import this one file, so they can't drift apart.
+
+**The table doesn't know where its game lives.** `pages/Room.tsx`'s `Table` takes a `Connection`: signals for the room, the board, chat and the event log, plus `send()`. There are two implementations:
+
+| | `connect()` (`connection.ts`) | `connectLocal()` (`cpu/localGame.ts`) |
+| --- | --- | --- |
+| Engine runs | on the server | in this tab |
+| Board's `PlayerIO` fed by | WebSocket messages `notify` / `rpc` | the engine directly |
+| Opponent | the other browser, via the server | `shared/bot.ts` |
+| `RoomView` comes from | the server's `room` messages | built locally to the same shape |
+| `send({t:"giveUp" / "rematch" / "retry"})` | sent to the server | handled locally |
+| Saved to | `data/rooms/<CODE>.json` on the server | `localStorage["gi.cpu"]` |
+
+**The lifecycle of an online move:**
+1. The engine needs a decision from player 0 and calls `rpc()` on that player's `PlayerIO` (`session.ts`).
+2. The server encodes the request and sends `{t:"rpc", id, data}` to that seat's socket.
+3. `connection.ts` decodes it and hands it to the board, which shows the choices.
+4. The player clicks. The board resolves, and the browser sends back `{t:"rpcResponse", id, data}`.
+5. The server checks the answer and resolves the engine's promise. The engine applies the move and `notify()`s both players.
+6. The engine reaches its next resumable pause, and `rooms.ts` writes the checkpoint to disk.
+
+If a socket drops anywhere in that sequence, the server sends `cancelRpc`, stops the engine, and keeps the step 6 checkpoint from the previous move. Nothing half-done is ever saved.
+
+**Seat vs `who`.** A *seat* is your place in the room: 0 created it, 1 joined. *`who`* is the engine's player index, and player 0 moves first. Who goes first is re-drawn every game, so the two are mapped per game (`whoOfSeat` / `seatOfWho` in `session.ts`, sent to the client as `RoomView.whoOfSeat`).
+
+## Project layout
+
+```
+client/                         the browser app (SolidJS, built by Vite into dist/client)
+  index.html                    page shell; loads src/main.tsx
+  public/
+    sw.js                       service worker: caches card art forever, falls back to a mirror,
+                                patches a few broken board-decoration URLs
+    manifest.webmanifest        installable-app metadata
+    favicon.svg
+    carddb/                     (generated at build) glossary + art filenames from genshin-db
+  src/
+    main.tsx                    entry: stylesheets, board-effects setting, mount <App/>, register sw
+    App.tsx                     hash router; lazy-loads and idle-prefetches the heavy pages;
+                                keeps the current page up until the next one's code is ready
+    connection.ts               Connection interface + connect(): online seat over a WebSocket,
+                                auto-reconnect, feeds the board's notify/rpc
+    cpu/localGame.ts            connectLocal(): vs-computer game run in the tab (engine + bot),
+                                checkpointed to localStorage; deck validation for it
+    api.ts                      HTTP calls: create room, join room, room info
+    assets.ts                   card names/art/share-codes (static-data service), pinned to the
+                                engine's card-pool version; high-res art switch; glossary loader
+    local.ts                    everything kept in localStorage: name, decks, seat tokens,
+                                settings, the vs-computer save
+    eventFeed.ts                turns engine notifications into the battle log (grouped, typed lines)
+    effects.ts                  board-effects setting (Fast/Off/Full): rescales the board's animations
+    async.ts                    fetchValue(): load data without blanking the page
+    styles.css                  all of our own styling
+    pages/
+      Home.tsx                  landing page: name, deck, settings, create/join, vs computer, your rooms
+      Room.tsx                  #/room/<code>: join form, and Table (the game screen used by both modes)
+      Cpu.tsx                   #/cpu: vs-computer setup, then Table with a local connection
+      DeckEditor.tsx            #/decks/<id>: gi-tcg deck builder + share codes
+    components/
+      DeckPicker.tsx            saved-deck list with New / Random / Import
+      Chat.tsx                  in-room chat drawer
+      Glossary.tsx              searchable rules & keywords drawer
+      BattleLog.tsx             the scrolling battle log, and the on-board callouts of the latest action
+
+server/                         the game server (Node; bundled by esbuild into dist/server)
+  main.ts                       process entry: listen on PORT, save everything on SIGINT/SIGTERM
+  index.ts                      HTTP API, /ws WebSocket (auth handshake, heartbeats), static files
+  rooms.ts                      RoomManager: seats and tokens, connect/disconnect, when to
+                                start/stop the engine, rematch, forfeit, chat
+  session.ts                    GameSession: one engine instance and its two PlayerIOs over sockets;
+                                re-asks invalid answers; emits checkpoints
+  storage.ts                    RoomRecord (the saved room) and FileRoomStore (atomic JSON files)
+  cards.ts                      engine card data, its version, deck validation
+  test/rooms.test.ts            end-to-end: real server, real sockets, disconnect/resume/restart
+  test/bot.test.ts              the bot plays full games legally and beats a naive opponent
+
+shared/                         imported by both sides
+  protocol.ts                   every client↔server message and the RoomView/room-info shapes
+  bot.ts                        the computer opponent (a PlayerIO); used by the browser and tests
+
+scripts/
+  dev.mjs                       `npm run dev`: server with rebuild-on-change + Vite with hot reload
+  build-server.mjs              esbuild bundle of the server (and of the tests for `npm test`)
+  build-carddb.mjs              extracts the small slice of genshin-db the client needs
+
+vite.config.ts                  client build; dev proxy of /api and /ws to the server
+Dockerfile, fly.toml            container image and Fly.io config (see Deploying)
+```
 
 ## Data sources
 

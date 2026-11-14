@@ -1,3 +1,7 @@
+// #/decks/<id> — build or edit a deck with gi-tcg's deck builder, limited to the
+// card pool the engine implements. Decks are saved in this browser only, and
+// can be shared as the game's standard share codes.
+
 import { Show, createSignal } from "solid-js";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import type { Deck } from "@gi-tcg/typings";

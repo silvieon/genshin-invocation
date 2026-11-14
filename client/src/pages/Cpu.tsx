@@ -1,3 +1,7 @@
+// #/cpu — play against the computer. Setup (your deck, the computer's deck)
+// until a game exists, then the same table as online play, driven by a local
+// connection (cpu/localGame.ts) instead of a WebSocket.
+
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import { DeckPicker, CharacterIcons } from "../components/DeckPicker";
 import { Table } from "./Room";
@@ -27,6 +31,7 @@ export function CpuPage() {
   );
 }
 
+/** Runs the saved game in this tab for as long as the page is open. */
 function CpuTable(props: { save: CpuSave }) {
   const conn = connectLocal(props.save);
   onCleanup(() => conn.dispose());
@@ -35,6 +40,7 @@ function CpuTable(props: { save: CpuSave }) {
 
 type Opponent = { kind: "random" } | { kind: "deck"; id: string };
 
+/** Pick decks and start a new game. Both decks are checked against the bundled engine first. */
 function CpuSetup(props: { previous: CpuSave | null; onStart: (s: CpuSave) => void }) {
   const [name, setNameSig] = createSignal(getName());
   const [deckId, setDeckId] = createSignal<string | null>(getLastDeckId());

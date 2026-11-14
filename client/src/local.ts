@@ -84,6 +84,10 @@ export type RotationSetting = "auto" | 0 | 90 | 270;
 export const getRotation = () => readJson<RotationSetting>("gi.rotation", "auto");
 export const setRotation = (r: RotationSetting) => writeJson("gi.rotation", r);
 
+/** Whether the battle log column is shown beside the board on wide screens. */
+export const getSideLog = () => readJson<boolean>("gi.sideLog", true);
+export const setSideLog = (on: boolean) => writeJson("gi.sideLog", on);
+
 export type ImageQuality = "high" | "saver";
 /** Defaults to full-resolution art unless the browser asks to save data. */
 export const getImageQuality = () =>

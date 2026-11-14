@@ -1,3 +1,10 @@
+// The whole server in one process: a plain Node HTTP server that
+//   - answers the small JSON API under /api (create / join / look up rooms),
+//   - upgrades /ws to a WebSocket for live play (one socket per seated player),
+//   - serves the built client (dist/client) for every other path.
+// Room logic lives in rooms.ts; this file only does transport: parsing,
+// authentication handshake, heartbeats and static files.
+
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
@@ -20,6 +27,11 @@ const HEARTBEAT_MS = 25_000;
 
 export const log = (msg: string) => console.log(`[${new Date().toISOString()}] ${msg}`);
 
+/**
+ * Builds (but doesn't start listening on) the HTTP + WebSocket server.
+ * Tests call this with a temp `dataDir` and `staticDir: null`; main.ts calls it
+ * with the defaults. Returns `close()` for a graceful shutdown that saves games.
+ */
 export async function createServer(opts: { dataDir?: string; staticDir?: string | null; quiet?: boolean } = {}) {
   const logger = opts.quiet ? () => {} : log;
   const store = new FileRoomStore(opts.dataDir ?? DATA_DIR);
@@ -28,6 +40,7 @@ export async function createServer(opts: { dataDir?: string; staticDir?: string 
   gameData(); // warm the card data so the first game starts instantly
   const staticDir = opts.staticDir === undefined ? STATIC_DIR : opts.staticDir;
 
+  // Delete rooms nobody has touched in ROOM_TTL_DAYS (never one that's open right now).
   const sweep = async () => {
     const n = await store.sweep(ROOM_TTL_DAYS * 86_400_000, (id) => rooms.isLive(id)).catch(() => 0);
     if (n) logger(`expired ${n} idle room(s)`);
@@ -78,6 +91,9 @@ export async function createServer(opts: { dataDir?: string; staticDir?: string 
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
   });
 
+  // Each socket must authenticate first ({t:"auth", room, token}); until then
+  // every other message is ignored, and it's closed after AUTH_TIMEOUT_MS.
+  // Once bound to a seat, messages are handed to the RoomManager.
   wss.on("connection", (ws: WebSocket) => {
     alive.set(ws, true);
     ws.on("pong", () => alive.set(ws, true));
@@ -137,6 +153,14 @@ export async function createServer(opts: { dataDir?: string; staticDir?: string 
 
 // ------------------------------------------------------------------- HTTP API
 
+/**
+ * Routes:
+ *   GET  /api/health          liveness + how many rooms/engines are in memory
+ *   GET  /api/meta            card-pool version the engine implements
+ *   POST /api/rooms           create a room  {name, deck} -> {roomId, seat, token}
+ *   GET  /api/rooms/:id       public info (status, player names)
+ *   POST /api/rooms/:id/join  take the free seat {name, deck} -> {roomId, seat, token}
+ */
 async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL, rooms: RoomManager) {
   const parts = url.pathname.split("/").filter(Boolean); // ["api", ...]
   if (req.method === "GET" && parts[1] === "health") {
@@ -168,6 +192,7 @@ function json(res: http.ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+/** Reads a JSON request body, refusing anything over 64 KB (a deck is ~200 bytes). */
 function readJson(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -206,6 +231,11 @@ const MIME: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
 };
 
+/**
+ * Serves the built client. Unknown paths fall back to index.html (the app uses
+ * hash routes, so this only matters for typos). Vite's hashed /assets/* files
+ * are cached forever; everything else is revalidated so deploys show up at once.
+ */
 function serveStatic(dir: string, pathname: string, res: http.ServerResponse) {
   let rel: string;
   try {

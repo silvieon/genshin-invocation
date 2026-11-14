@@ -1,3 +1,12 @@
+// The bridge between one running gi-tcg engine and two WebSockets.
+//
+// The engine talks to each player through a PlayerIO: `notify` (state updates,
+// fire-and-forget) and `rpc` (a question the player must answer: pick an
+// action, reroll, choose a character...). Here both are encoded as protobuf,
+// sent as `notify` / `rpc` messages, and the browser's `rpcResponse` resolves
+// the engine's waiting promise. Seats (room order) and "who" (engine order,
+// 0 moves first) are different: helpers below convert between them.
+
 import {
   Game,
   serializeGameStateLog,
@@ -69,6 +78,7 @@ export class GameSession {
     return this.game !== null && !this.stopped;
   }
 
+  /** Build the engine from the checkpoint (or a fresh state), wire its IO, and run it in the background. */
   start() {
     const { record } = this.opts;
     const data = gameData();
@@ -158,6 +168,7 @@ export class GameSession {
     p.resolve(res);
   }
 
+  /** Tell the player what was wrong and send the same question again under a new id. */
   private reask(id: number, p: PendingRpc, why: string) {
     this.opts.log?.(`rejected response from player ${p.who}: ${why}`);
     this.pending.delete(id);
@@ -176,6 +187,7 @@ export class GameSession {
     });
   }
 
+  /** The PlayerIO the engine uses for one player: forwards everything to that player's seat. */
   private createIo(who: 0 | 1): PlayerIO {
     const seat = seatOfWho(this.opts.record, who);
     return {

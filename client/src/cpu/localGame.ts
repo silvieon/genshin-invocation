@@ -14,6 +14,7 @@ import { assets } from "../assets";
 import { createEventFeed } from "../eventFeed";
 import { getEffects, saveCpuGame, type CpuSave } from "../local";
 
+// The engine's card definitions, built on first use (it's sizeable, and only this page needs it).
 let data: ReturnType<typeof getData> | null = null;
 const gameData = () => (data ??= getData());
 
@@ -26,8 +27,12 @@ export function unsupportedCards(deck: DeckInput): number[] {
   ];
 }
 
+/** Computer's pause per decision, by board-effects mode (animations take part of the time in Full). */
+const BOT_PACE_MS = { off: 900, fast: 1100, full: 1300 } as const;
+
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
+/** A not-yet-started game: who moves first is a coin flip, and the seed fixes shuffles and dice. */
 export function newCpuGame(base: Pick<CpuSave, "name" | "deck" | "botDeck" | "botName">, gameNumber = 1): CpuSave {
   return {
     v: 1,
@@ -43,6 +48,12 @@ export function newCpuGame(base: Pick<CpuSave, "name" | "deck" | "botDeck" | "bo
   };
 }
 
+/**
+ * A Connection (see connection.ts) whose "server" is this tab: it plays the
+ * room role the server would, so the table UI works unchanged. The human is
+ * always seat 0 and the computer seat 1; `humanWho` says which engine player
+ * the human is.
+ */
 export function connectLocal(initial: CpuSave): Connection {
   let save = initial;
   const [link] = createSignal<LinkState>("online");
@@ -62,12 +73,14 @@ export function connectLocal(initial: CpuSave): Connection {
   let surrendered = false;
   let disposed = false;
 
+  /** Update the save in localStorage and tell the UI. */
   const persist = (patch: Partial<CpuSave>) => {
     save = { ...save, ...patch, updatedAt: Date.now() };
     saveCpuGame(save);
     publish();
   };
 
+  /** Present the local game as a RoomView, the same shape the server sends for online rooms. */
   const publish = () => {
     const status = save.result ? "finished" : engine ? "playing" : "paused";
     setRoom({
@@ -86,6 +99,7 @@ export function connectLocal(initial: CpuSave): Connection {
     });
   };
 
+  /** Abandon the running engine. Bumping `generation` makes any late callbacks from it no-ops. */
   const stop = () => {
     generation++;
     bot?.dispose();
@@ -99,6 +113,7 @@ export function connectLocal(initial: CpuSave): Connection {
     engine = null;
   };
 
+  /** Start the engine from the checkpoint (or from scratch), with the board as one player and the bot as the other. */
   const start = () => {
     stop();
     const gen = generation;
@@ -136,8 +151,9 @@ export function connectLocal(initial: CpuSave): Connection {
     const g = new Game(state, { errorLevel: "toleratePreview" });
     engine = g;
     surrendered = false;
-    // A short beat so its moves are readable; shorter still when animations are sped up or off.
-    bot = createBot(botWho, { thinkMs: { off: 250, fast: 400, full: 700 }[getEffects()], randomness: 0.6 });
+    // Pause before each of the computer's moves, long enough to read the callout
+    // of what just happened before the next thing happens.
+    bot = createBot(botWho, { thinkMs: BOT_PACE_MS[getEffects()], randomness: 0.6 });
     const board = io!;
     g.players[humanWho].io = {
       notify: (n) => {
@@ -187,6 +203,7 @@ export function connectLocal(initial: CpuSave): Connection {
     }
   };
 
+  /** The same messages the table sends to the server, handled locally. */
   const send = (msg: ClientMessage) => {
     if (disposed) return;
     switch (msg.t) {
