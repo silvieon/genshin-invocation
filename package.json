@@ -1,0 +1,50 @@
+{
+  "name": "genshin-invocation",
+  "version": "0.1.0",
+  "description": "Web client player for Genshin Impact's Genius Invocation TCG",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build-carddb.mjs && vite build && node scripts/build-server.mjs",
+    "start": "node --enable-source-maps dist/server/main.mjs",
+    "test": "node scripts/build-server.mjs --test",
+    "typecheck": "tsc -p .",
+    "carddb": "node scripts/build-carddb.mjs --force"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/silvieon/genshin-invocation.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/silvieon/genshin-invocation/issues"
+  },
+  "homepage": "https://github.com/silvieon/genshin-invocation#readme",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@genshin-db/tcg": "5.2.15",
+    "@gi-tcg/assets-manager": "0.21.0",
+    "@gi-tcg/core": "0.21.0",
+    "@gi-tcg/data": "0.21.0",
+    "@gi-tcg/deck-builder": "0.21.0",
+    "@gi-tcg/typings": "0.21.0",
+    "@gi-tcg/utils": "0.21.0",
+    "@gi-tcg/web-ui-core": "0.21.0",
+    "solid-js": "^1.9.19",
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-solid": "^2.11.16"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

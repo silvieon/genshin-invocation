@@ -1,0 +1,10 @@
+{
+  "name": "Genius Invokation Online",
+  "short_name": "GI TCG",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1b1f2e",
+  "theme_color": "#1b1f2e",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
